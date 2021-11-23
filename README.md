@@ -10,9 +10,14 @@ $ cd "DESIRED_LOCATION"
 $ git clone git@github.com:Ha-JH/CS492A.git
 ```
 
-Create virtual env
+Install virtualenv
 ```
-$ python3 -m venv .venv
+pip3 install virtualenv
+```
+
+Create virtualenv
+```
+$ virtualenv .venv
 ```
 
 Activate virtual env
