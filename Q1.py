@@ -35,8 +35,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DCGANS MNIST')
     parser.add_argument('--num-epochs', type=int, default=20)
     parser.add_argument('--ngpu', type=int, default=1, help='Number of GPUs available. Use 0 for CPU mode')
-    parser.add_argument('--ndf', type=int, default=64, help='Number of features to be used in Discriminator network')
-    parser.add_argument('--ngf', type=int, default=64, help='Number of features to be used in Generator network')
+    parser.add_argument('--ndf', type=int, default=128, help='Number of features to be used in Discriminator network')
+    parser.add_argument('--ngf', type=int, default=128, help='Number of features to be used in Generator network')
     parser.add_argument('--nz', type=int, default=100, help='Size of the noise')
     parser.add_argument('--lr', type=float, default=0.0002, help='Learning rate')
     parser.add_argument('--beta', type=float, default=0.5, help='Beta for Adam optimizers')
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
     ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
     writergif = animation.PillowWriter(fps=30) 
-    ani.save(args.output_path+"fake.gif", writer=writergif)
+    ani.save(args.output_path+"fake_dcgan.gif", writer=writergif)
 
     # Grab a batch of real images from the dataloader
     real_batch = next(iter(dataloader))

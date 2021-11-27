@@ -22,7 +22,7 @@ from torch import cuda
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from DCGAN import DCGAN
+from CGAN import CGAN
 from utils import get_data_loader, generate_images, save_gif
 
 
@@ -36,8 +36,6 @@ if __name__ == '__main__':
     parser.add_argument('--num-epochs', type=int, default=30)
     parser.add_argument('--ngpu', type=int, default=1, help='Number of GPUs available. Use 0 for CPU mode')
     parser.add_argument('--n-classes', type=int, default=10, help='Number of classes')
-    parser.add_argument('--emb-dim', type=int, default=100, help='embedding dimmesion')
-    parser.add_argument('--latent-dim', type=int, default=100, help='latent dimesion')
     parser.add_argument('--ndf', type=int, default=64, help='Number of features to be used in Discriminator network')
     parser.add_argument('--ngf', type=int, default=64, help='Number of features to be used in Generator network')
     parser.add_argument('--nz', type=int, default=100, help='Size of the noise')
@@ -82,7 +80,7 @@ if __name__ == '__main__':
     plt.title("Training Images")
     plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
 
-    dcgan = DCGAN(ngpu=args.ngpu, device=device, lr=args.lr, nc=args.nc, ndf=args.ndf, nz=args.nz, ngf=args.ngf, beta1=args.beta)
+    cgan = CGAN(ngpu=args.ngpu, device=device, lr=args.lr, nc=args.nc, ndf=args.ndf, nz=args.nz, ngf=args.ngf, beta1=args.beta)
     
     # initialize other variables
     num_batches = len(dataloader)
@@ -90,7 +88,7 @@ if __name__ == '__main__':
 
 
 
-    img_list = dcgan.train(dataloader=dataloader, num_epochs=args.num_epochs, plot=args.plot)
+    img_list = cgan.train(dataloader=dataloader, num_epochs=args.num_epochs, plot=args.plot)
 
 
     #%%capture
@@ -99,7 +97,7 @@ if __name__ == '__main__':
     ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
     ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
     writergif = animation.PillowWriter(fps=30) 
-    ani.save(args.output_path+"fake.gif", writer=writergif)
+    ani.save(args.output_path+"fake_cgan.gif", writer=writergif)
 
     # Grab a batch of real images from the dataloader
     real_batch = next(iter(dataloader))

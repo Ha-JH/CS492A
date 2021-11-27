@@ -1,9 +1,13 @@
+from types import new_class
 import torch
+from torch.autograd.grad_mode import no_grad
 import torch.nn as nn
+from torch.nn.modules.activation import LeakyReLU, ReLU
+from torch.nn.modules.batchnorm import BatchNorm2d
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
-from torch.autograd import Variable
+from torch.autograd import Variable, backward
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.utils as vutils
@@ -13,82 +17,112 @@ import numpy as np
 
 
 class Discriminator(nn.Module):
-    def __init__(self, ngpu, n_classes=10, embedding_dim=100, nc=1, ndf=32):
+    def __init__(self, ngpu, n_classes=10, nc=1, ndf=64):
         super(Discriminator, self).__init__()
         self.ngpu = ngpu
-
-        self.label_condition_disc = nn.Sequential(nn.Emebedding(n_classes, embedding_dim), nn.Linear(embedding_dim, 3*128*128))
-
-        self.main = nn.Sequential(
+        self.nc = nc
+        self.ndf = ndf
+        
+        
+        self.image_net = nn.Sequential(
             # input is (nc) x 32 x 32
             nn.Conv2d(in_channels=nc, out_channels=ndf, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(ndf),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True)
             # state size. (ndf) x 16 x 16
-            nn.Conv2d(in_channels=ndf, out_channels=ndf * 2, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(ndf * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*2) x 8 x 8
+        )
+        
+        '''
+        self.label_embedding = nn.Embedding(n_classes, n_classes)
+
+        self.label_net = nn.Sequential(
+            # input is one-hot embedding (n_classes)
+            nn.Conv2d(in_channels=n_classes, out_channels=ndf, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(ndf),
+            nn.LeakyReLU(0.2, inplace=True)
+            # state size. (ndf) x 16 x 16
+        )
+        '''
+        self.label_condition = nn.Sequential(
+            nn.Embedding(n_classes, n_classes),
+            nn.Linear(n_classes, 16 * 16 * ndf)
+        )
+
+        self.main = nn.Sequential(
+            # input is (ndf*2) x 16 x 16
             nn.Conv2d(in_channels=ndf * 2, out_channels=ndf * 4, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*4) x 4 x 4
+            # state size. (ndf*4) x 8 x 8
             nn.Conv2d(in_channels=ndf * 4, out_channels=ndf * 8, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*8) x 2 x 2
+            # state size. (ndf*8) x 4 x 4
             nn.Conv2d(in_channels=ndf * 8, out_channels=1, kernel_size=4, stride=1, padding=0, bias=False),
             nn.Sigmoid()
         )
 
     def forward(self, input):
         img, label = input
-        label_output = self.label_condition_disc(label)
-        label_output = label_output.view(-1, 3, 128, 128)
-        concat = torch.cat((img, label_output), dim=1)
+        label_output = self.label_condition(label)
+        label_output = label_output.view(-1, self.ndf, 16, 16)
+        concat = torch.cat((self.image_net(img), label_output), dim=1)
         return self.main(concat)
 
 
 class Generator(nn.Module):
-    def __init__(self, ngpu, n_classes=10, embedding_dim=100, latent_dim=100, nz=100, ngf=32, nc=1):
+    def __init__(self, ngpu, n_classes=10, nz=100, ngf=64, nc=1):
         super(Generator, self).__init__()
         self.ngpu = ngpu
+        self.nz = nz
+        self.nc = nc
+        self.ngf = ngf
 
-        self.label_conditioned_generator = nn.Sequential(nn.Embedding(n_classes, embedding_dim), nn.Linear(embedding_dim, 16))
+        self.noise_net = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(in_channels=nz, out_channels=ngf * 4, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True)
+            # state size. (ngf*4) x 4 x 4
+        )
 
-        self.latent = nn.Sequential(nn.Linear(latent_dim, 4*4*512), nn.LeakyReLU(0.2, inplace=True))
+        '''
+        self.label_embedding = nn.Embedding(n_classes, n_classes)
 
+        self.label_net = nn.Sequential(
+            # input is one-hot embedding (emedding_dim)
+            nn.ConvTranspose2d(in_channels=n_classes, out_channels=ngf * 4, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True)
+            # state size. (ngf*4) x 4 x 4
+        )
+        '''
+
+        self.label_condition = nn.Sequential(
+            nn.Embedding(n_classes, n_classes),
+            nn.Linear(n_classes, 4 * 4 * 4 * ngf)
+        )
 
         self.main = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(in_channels=nz, out_channels=ngf * 8, kernel_size=4, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(ngf * 8),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 4 x 4
+            # input is (ngf*8) x 4 x 4
             nn.ConvTranspose2d(in_channels=ngf * 8, out_channels=ngf * 4, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(ngf * 4),
             nn.ReLU(True),
-            # state size. (ngf*2) x 8 x 8
+            # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose2d(in_channels=ngf * 4, out_channels=ngf * 2, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(ngf * 2),
             nn.ReLU(True),
-            # state size. (ngf*2) x 8 x 8
-            nn.ConvTranspose2d(in_channels=ngf * 2, out_channels=ngf, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(ngf),
-            nn.ReLU(True),
-            # state size. (ngf) x 16 x 16
-            nn.ConvTranspose2d(in_channels=ngf, out_channels=nc, kernel_size=4, stride=2, padding=1, bias=False),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(in_channels=ngf * 2, out_channels=nc, kernel_size=4, stride=2, padding=1, bias=False),
             nn.Tanh()
             # state size. (nc) x 32 x 32
         )
 
     def forward(self, input):
-        noise_vector, label = input
-        label_output = self.label_conditioned_generator(label)
-        label_output = label_output.view(-1,1,4,4)
-        latent_output = self.latent(noise_vector)
-        latent_output = latent_output.view(-1, 512, 4, 4)
-        concat = torch.cat((latent_output, label_output), dim=1)
+        noise, label = input
+        label_output = self.label_condition(label)
+        label_output = label_output.view(-1, self.ngf * 4, 4, 4)
+        concat = torch.cat((self.noise_net(noise), label_output), dim=1)
         return self.main(concat)
 
 
@@ -102,13 +136,12 @@ def weights_init(m):
 
 
 class CGAN():
-    def __init__(self, ngpu, device, n_classes=10, embedding_dim=100, latent_dim=100, lr=0.0002, nc=1, ndf=32, nz=100, ngf=32, beta1=0.5):
+    def __init__(self, ngpu, device, n_classes=10, embedding_dim=10, lr=0.0002, nc=1, ndf=64, nz=100, ngf=64, beta1=0.5):
         self.ngpu = ngpu
         self.device = device
 
         self.n_classes = n_classes
         self.embeding_dim = embedding_dim
-        self.latent_dim = latent_dim
         self.lr = lr
         self.nc = nc
         self.ndf = ndf
@@ -116,7 +149,7 @@ class CGAN():
         self.ngf = ngf
 
         # Create the generator
-        self.netG = Generator(ngpu, nz, ngf).to(device)
+        self.netG = Generator(ngpu, n_classes, nz, ngf, nc).to(device)
 
         # Handle multi-gpu if desired
         if (device.type == 'cuda') and (ngpu > 1):
@@ -127,7 +160,7 @@ class CGAN():
         self.netG.apply(weights_init)
 
         # Create the Discriminator
-        self.netD = Discriminator(ngpu, nc, ndf).to(device)
+        self.netD = Discriminator(ngpu, n_classes, nc, ndf).to(device)
 
         # Handle multi-gpu if desired
         if (device.type == 'cuda') and (ngpu > 1):
@@ -144,6 +177,9 @@ class CGAN():
         # Create batch of latent vectors that we will use to visualize
         #  the progression of the generator
         self.fixed_noise = torch.randn(64, nz, 1, 1, device=device)
+        self.fixed_label = torch.arange(64, device=device)
+        self.fixed_label = torch.remainder(self.fixed_label, n_classes)
+        self.fixed_label= self.fixed_label.view(-1, 1)
 
         # Establish convention for real and fake labels during training
         self.real_label = 1.
@@ -184,68 +220,30 @@ class CGAN():
                 real_target = Variable(torch.ones(b_size, 1).to(self.device))
                 fake_target = Variable(torch.zeros(b_size, 1).to(self.device))
 
-                output = self.netD((real_images, labels))
+                output = self.netD((real_images, labels)).view(-1, 1)
                 errD_real = self.criterion(output, real_target)
+                errD_real.backward()
+                D_x = output.mean().item()
 
-                noise_vector = torch.randn(b_size, self.latent_dim, device=self.device)
+                noise_vector = torch.randn(b_size, self.nz, 1, 1, device=self.device)
                 noise_vector = noise_vector.to(self.device)
 
                 generated_image = self.netG((noise_vector, labels))
-                output = self.netD((generated_image.detach(), labels))
+                output = self.netD((generated_image.detach(), labels)).view(-1, 1)
                 errD_fake = self.criterion(output, fake_target)
+                errD_fake.backward()   
+                D_G_z1 = output.mean().item()
 
-                errD = (errD_real + errD_fake) / 2
+                errD = errD_real + errD_fake
 
-                errD.backward()
                 self.optimizerD.step()
 
 
                 self.optimizerG.zero_grad()
-                errG = self.criterion(self.netD((generated_image, labels)), real_target)
-
-                errG.backward()
-                self.optimizerG.step()
-
-                label = torch.full((b_size,), self.real_label, dtype=torch.float, device=self.device)
-                # Forward pass real batch through D
-                output = self.netD(real_cpu).view(-1)
-                # Calculate loss on all-real batch
-                errD_real = self.criterion(output, label)
-                # Calculate gradients for D in backward pass
-                errD_real.backward()
-                D_x = output.mean().item()
-
-                ## Train with all-fake batch
-                # Generate batch of latent vectors
-                noise = torch.randn(b_size, self.nz, 1, 1, device=self.device)
-                # Generate fake image batch with G
-                fake = self.netG(noise)
-                label.fill_(self.fake_label)
-                # Classify all fake batch with D
-                output = self.netD(fake.detach()).view(-1)
-                # Calculate D's loss on the all-fake batch
-                errD_fake = self.criterion(output, label)
-                # Calculate the gradients for this batch, accumulated (summed) with previous gradients
-                errD_fake.backward()
-                D_G_z1 = output.mean().item()
-                # Compute error of D as sum over the fake and the real batches
-                errD = errD_real + errD_fake
-                # Update D
-                self.optimizerD.step()
-
-                ############################
-                # (2) Update G network: maximize log(D(G(z)))
-                ###########################
-                self.netG.zero_grad()
-                label.fill_(self.real_label)  # fake labels are real for generator cost
-                # Since we just updated D, perform another forward pass of all-fake batch through D
-                output = self.netD(fake).view(-1)
-                # Calculate G's loss based on this output
-                errG = self.criterion(output, label)
-                # Calculate gradients for G
+                output = self.netD((generated_image, labels)).view(-1, 1)
+                errG = self.criterion(output, real_target)
                 errG.backward()
                 D_G_z2 = output.mean().item()
-                # Update G
                 self.optimizerG.step()
 
                 # Output training stats
@@ -261,7 +259,7 @@ class CGAN():
                 # Check how the generator is doing by saving G's output on fixed_noise
                 if (iters % 500 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
                     with torch.no_grad():
-                        fake = self.netG(self.fixed_noise).detach().cpu()
+                        fake = self.netG((self.fixed_noise, self.fixed_label)).detach().cpu()
                     img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
                 iters += 1

@@ -13,7 +13,7 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 class Classifier():
-    def __init__(self, batch_size, lr=0.001):
+    def __init__(self, batch_size=128, lr=0.001):
         self.net = LeNet()
 
         self.lr = lr
@@ -33,14 +33,14 @@ class Classifier():
                         transform=transform)
         valid_size = 5000
         train_size = len(dataset_full) - 5000
-        dataset_train, dataset_valid = torch.utils.data.random_split(dataset_full, [train_size, valid_size])
+        self.dataset_train, self.dataset_valid = torch.utils.data.random_split(dataset_full, [train_size, valid_size])
 
-        dataset_test = datasets.MNIST('./mnist_data', train=False,
+        self.dataset_test = datasets.MNIST('./mnist_data', train=False,
                         transform=transform)
 
-        self.train_loader = torch.utils.data.DataLoader(dataset_train, batch_size, shuffle=True)
-        self.valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size, shuffle=False)
-        self.test_loader = torch.utils.data.DataLoader(dataset_test, batch_size, shuffle=False)
+        self.train_loader = torch.utils.data.DataLoader(self.dataset_train, batch_size, shuffle=True)
+        self.valid_loader = torch.utils.data.DataLoader(self.dataset_valid, batch_size, shuffle=False)
+        self.test_loader = torch.utils.data.DataLoader(self.dataset_test, batch_size, shuffle=False)
 
 
     # Train & test part from https://github.com/activatedgeek/LeNet-5
@@ -186,5 +186,6 @@ def plot_example_errors(y_pred, y_true):
                 cls_pred=cls_pred[0:9].astype(np.int))
     
 
-if __name__=='main':
-    pass
+if __name__=='__main__':
+    classifier = Classifier()
+    classifier.train()
