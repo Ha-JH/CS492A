@@ -33,7 +33,7 @@ torch.manual_seed(manualSeed)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DCGANS MNIST')
-    parser.add_argument('--num-epochs', type=int, default=30)
+    parser.add_argument('--num-epochs', type=int, default=100)
     parser.add_argument('--ngpu', type=int, default=1, help='Number of GPUs available. Use 0 for CPU mode')
     parser.add_argument('--n-classes', type=int, default=10, help='Number of classes')
     parser.add_argument('--ndf', type=int, default=64, help='Number of features to be used in Discriminator network')

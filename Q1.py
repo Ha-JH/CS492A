@@ -33,7 +33,7 @@ torch.manual_seed(manualSeed)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DCGANS MNIST')
-    parser.add_argument('--num-epochs', type=int, default=20)
+    parser.add_argument('--num-epochs', type=int, default=10)
     parser.add_argument('--ngpu', type=int, default=1, help='Number of GPUs available. Use 0 for CPU mode')
     parser.add_argument('--ndf', type=int, default=128, help='Number of features to be used in Discriminator network')
     parser.add_argument('--ngf', type=int, default=128, help='Number of features to be used in Generator network')
@@ -58,8 +58,8 @@ if __name__ == '__main__':
                                transforms.Resize(args.image_size),
                                transforms.CenterCrop(args.image_size),
                                transforms.ToTensor(),
-                               transforms.Normalize(mean=0.5, std=0.5)
-                            #    transforms.Normalize(mean=(0.1307, ), std=(0.3081, )),
+                            #    transforms.Normalize(mean=0.5, std=0.5)
+                               transforms.Normalize(mean=(0.1307, ), std=(0.3081, )),
                            ])    
     dataset = dset.MNIST(root='./mnist_data/',
                            transform=transform, download=True)

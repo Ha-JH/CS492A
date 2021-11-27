@@ -82,7 +82,7 @@ def weights_init(m):
 
 
 class DCGAN():
-    def __init__(self, ngpu, device, lr=0.0002, nc=1, ndf=32, nz=100, ngf=32, beta1=0.5):
+    def __init__(self, ngpu, device, lr=0.0002, nc=1, ndf=128, nz=100, ngf=128, beta1=0.5):
         self.ngpu = ngpu
         self.device = device
 
@@ -101,7 +101,7 @@ class DCGAN():
 
         # Apply the weights_init function to randomly initialize all weights
         #  to mean=0, stdev=0.02.
-        self.netG.apply(weights_init)
+        # self.netG.apply(weights_init)
 
         # Create the Discriminator
         self.netD = Discriminator(ngpu, nc, ndf).to(device)
@@ -112,7 +112,7 @@ class DCGAN():
 
         # Apply the weights_init function to randomly initialize all weights
         #  to mean=0, stdev=0.2.
-        self.netD.apply(weights_init)
+        # self.netD.apply(weights_init)
 
 
         # Initialize BCELoss function
