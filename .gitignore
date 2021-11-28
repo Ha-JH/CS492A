@@ -1,1 +1,6 @@
+.venv/
+models/
+__pycache__/
+mnist_data/
+.ipynb_checkpoints/
 

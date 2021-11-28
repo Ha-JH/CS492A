@@ -1,1 +1,8 @@
-
+numpy
+matplotlib
+torch
+torchvision
+argparse
+imageio
+natsort
+glob
