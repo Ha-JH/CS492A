@@ -12,7 +12,7 @@ manualSeed = 999
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-class Classifier():
+class Classifier(nn.Module):
     def __init__(self, batch_size=128, lr=0.001):
         self.net = LeNet()
 
@@ -44,11 +44,14 @@ class Classifier():
 
 
     # Train & test part from https://github.com/activatedgeek/LeNet-5
-    def train(self, num_epochs=30):
+    def train(self, dataloader=None, num_epochs=30, model_path="./models/", filename="lenet.pt"):
+        if dataloader is None:
+            dataloader = self.train_loader
+
         for e in range(num_epochs):
             self.net.train()
             loss_list, batch_list = [], []
-            for i, (images, labels) in enumerate(self.train_loader):
+            for i, (images, labels) in enumerate(dataloader):
                 self.optimizer.zero_grad()
                 output = self.net(images)
                 loss = self.criterion(output, labels)
@@ -75,9 +78,78 @@ class Classifier():
                 'lenet': self.net.state_dict(),
                 'opt': self.optimizer.state_dict(),
             },
-            ('./models/lenet_classifier.model'),
+            (model_path+filename),
         )
         print("Model saved")
+
+    def adv_train(self, fake_dataloader, num_epochs=30, model_path="./models/", filename="lenet.pt"):
+
+        for e in range(num_epochs):
+            self.net.train()
+            loss_list, batch_list = [], []
+            for i, (images, labels) in enumerate(self.train_loader):
+                self.optimizer.zero_grad()
+                output = self.net(images)
+                loss = self.criterion(output, labels)
+
+                loss_list.append(loss.detach().cpu().item())
+                batch_list.append(i+1)
+
+                #if i % 10 == 0:
+                #    print('Train - Epoch %d, Batch: %d, Loss: %f' % (epoch, i, loss.detach().cpu().item()))
+
+                loss.backward()
+                self.optimizer.step()
+
+                fake_images, fake_labels = fake_dataloader[i]
+
+                self.optimizer.zero_grad()
+                output = self.net(fake_images)
+                loss = self.criterion(output, fake_labels)
+
+                loss_list.append(loss.detach().cpu().item())
+                batch_list.append(i+1)
+
+                #if i % 10 == 0:
+                #    print('Train - Epoch %d, Batch: %d, Loss: %f' % (epoch, i, loss.detach().cpu().item()))
+
+                loss.backward()
+                self.optimizer.step()
+
+
+            validation_accuracy , validation_predictions = self.evaluate(self.valid_loader, self.dataset_valid)
+            print("EPOCH {} ...".format(e))
+            print("Validation Accuracy = {:.3f}".format(validation_accuracy))
+            print()
+
+        test_accuracy, test_predictions = self.evaluate(self.test_loader, self.dataset_test)
+        print("Test Accuracy = {:.3f}".format(test_accuracy))
+        
+        torch.save(
+            {
+                'lenet': self.net.state_dict(),
+                'opt': self.optimizer.state_dict(),
+            },
+            (model_path+filename),
+        )
+        print("Model saved")
+    
+    def load(self, model_path="./models/", filename="lenet_classifier.pt"):
+        state = torch.load(model_path+filename)
+        self.net.load_state_dict(state['lenet'])
+        self.net.load_state_dict(state['opt'])
+        print("Model loaded")
+
+    def save(self, model_path="./models/", filename="lenet_classifier.pt"):
+        torch.save(
+            {
+                'lenet': self.net.state_dict(),
+                'opt': self.optimizer.state_dict(),
+            },
+            ('./models/lenet_classifier.pt'),
+        )
+        print("Model saved")
+
 
     def evaluate(self, target_loader, target_dataset):
         predictions = []

@@ -16,6 +16,7 @@ import matplotlib.animation as animation
 import numpy as np
 
 
+
 class Discriminator(nn.Module):
     def __init__(self, ngpu, n_classes=10, nc=1, ndf=64):
         super(Discriminator, self).__init__()
@@ -135,8 +136,9 @@ def weights_init(m):
         nn.init.constant_(m.bias.data, 0)
 
 
-class CGAN():
-    def __init__(self, ngpu, device, n_classes=10, embedding_dim=10, lr=0.0002, nc=1, ndf=64, nz=100, ngf=64, beta1=0.5):
+class CGAN(nn.Module):
+    def __init__(self, ngpu, device, n_classes=10, embedding_dim=10, lr=0.0002, nc=1, ndf=64, nz=100, ngf=64, beta1=0.5, real_label=1.0):
+        super(CGAN, self).__init__()
         self.ngpu = ngpu
         self.device = device
 
@@ -182,7 +184,7 @@ class CGAN():
         self.fixed_label= self.fixed_label.view(-1, 1)
 
         # Establish convention for real and fake labels during training
-        self.real_label = 1.
+        self.real_label = real_label
         self.fake_label = 0.
 
         # Setup Adam optimizers for both G and D
@@ -276,3 +278,43 @@ class CGAN():
             plt.show()
 
         return img_list
+    
+    def create_dataloader(self, num_samples=1000, batch_size=128):
+        labels = torch.arange(64, device=self.device)
+        labels = torch.remainder(labels, self.n_classes)
+        noises = torch.randn(num_samples, self.nz, 1, 1, device=self.device)
+        with torch.no_grad():
+                fakes = self.netG(noises, labels).detach().cpu()
+                images = vutils.make_grid(fakes, padding=2, normalize=True)
+        
+        data = {
+            'images': images,
+            'labels': labels
+        }
+
+        dataset = FakeDataset(data)
+
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
+                        shuffle=True, num_workers=0)
+
+        return dataset, dataloader
+ 
+class FakeDataset(dset):
+    def __init__(self, data, transform=None):
+         self.transform = transform
+         self.data = data
+    
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        image = self.data['images'][idx]
+        label = self.data['labels'][idx]
+        sample = {'image':image,'label':label}
+
+        return sample
+
+    
