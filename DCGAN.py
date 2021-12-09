@@ -4,6 +4,7 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data
+from torch.utils.data import Dataset
 import torchvision.datasets as dset
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
@@ -227,37 +228,3 @@ class DCGAN():
             plt.show()
 
         return img_list
-
-    def create_dataloader(self, num_samples=1000, batch_size=128):
-        noises = torch.randn(num_samples, self.nz, 1, 1, device=self.device)
-        with torch.no_grad():
-                fakes = self.netG(noises).detach().cpu()
-                images = vutils.make_grid(fakes, padding=2, normalize=True)
-        
-        data = {
-            'images': images,
-        }
-
-        dataset = FakeDataset(data)
-
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                        shuffle=True, num_workers=0)
-
-        return dataset, dataloader
- 
-class FakeDataset(dset):
-    def __init__(self, data, transform=None):
-         self.transform = transform
-         self.data = data
-    
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        image = self.data['images'][idx]
-        sample = {'image':image}
-
-        return sample

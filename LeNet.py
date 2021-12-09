@@ -13,8 +13,10 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 class Classifier(nn.Module):
-    def __init__(self, batch_size=128, lr=0.001):
-        self.net = LeNet()
+    def __init__(self, device, batch_size=128, lr=0.001):
+        super(Classifier, self).__init__()
+        self.device = device
+        self.net = LeNet().to(device)
 
         self.lr = lr
         self.criterion = nn.CrossEntropyLoss()
@@ -53,6 +55,8 @@ class Classifier(nn.Module):
             loss_list, batch_list = [], []
             for i, (images, labels) in enumerate(dataloader):
                 self.optimizer.zero_grad()
+                images = images.cuda() #####
+                labels = labels.cuda() #####
                 output = self.net(images)
                 loss = self.criterion(output, labels)
 
@@ -89,6 +93,8 @@ class Classifier(nn.Module):
             loss_list, batch_list = [], []
             for i, (images, labels) in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
+                images = images.cuda() #####
+                labels = labels.cuda() #####
                 output = self.net(images)
                 loss = self.criterion(output, labels)
 
@@ -137,7 +143,7 @@ class Classifier(nn.Module):
     def load(self, model_path="./models/", filename="lenet_classifier.pt"):
         state = torch.load(model_path+filename)
         self.net.load_state_dict(state['lenet'])
-        self.net.load_state_dict(state['opt'])
+        self.optimizer.load_state_dict(state['opt'])
         print("Model loaded")
 
     def save(self, model_path="./models/", filename="lenet_classifier.pt"):
@@ -157,6 +163,8 @@ class Classifier(nn.Module):
         total_correct = 0
         avg_loss = 0.0
         for i, (images, labels) in enumerate(target_loader):
+            images = images.cuda() #####
+            labels = labels.cuda() #####
             output = self.net(images)
             avg_loss += self.criterion(output, labels).sum()
             pred = output.detach().max(1)[1]
@@ -166,7 +174,7 @@ class Classifier(nn.Module):
         avg_loss /= len(target_dataset)
         #print('Test Avg. Loss: %f, Accuracy: %f' % (avg_loss.detach().cpu().item(), float(total_correct) / len(data_test)))
         accuracy    = float(total_correct) / len(target_dataset)
-        return accuracy, np.array(torch.cat(predictions))
+        return accuracy, np.array(torch.cat(predictions).cpu()) ##### np.array(torch.cat(predictions))
         #or if you are in latest Pytorch world
         #return accuracy, np.array(torch.vstack(predictions))
 
