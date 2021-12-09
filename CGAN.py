@@ -15,6 +15,7 @@ import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+from torchgan.layers import VirtualBatchNorm
 
 
 
@@ -73,20 +74,30 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, ngpu, n_classes=10, nz=100, ngf=64, nc=1):
+    def __init__(self, ngpu, n_classes=10, nz=100, ngf=64, nc=1, VBN=False):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         self.nz = nz
         self.nc = nc
         self.ngf = ngf
 
-        self.noise_net = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(in_channels=nz, out_channels=ngf * 4, kernel_size=4, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(ngf * 4),
-            nn.ReLU(True)
-            # state size. (ngf*4) x 4 x 4
-        )
+        if VBN:
+            self.noise_net = nn.Sequential(
+                # input is Z, going into a convolution
+                nn.ConvTranspose2d(in_channels=nz, out_channels=ngf * 4, kernel_size=4, stride=1, padding=0, bias=False),
+                VirtualBatchNorm(ngf * 4),
+                # nn.BatchNorm2d(ngf * 4),
+                nn.ReLU(True)
+                # state size. (ngf*4) x 4 x 4
+                )
+        else:
+                self.noise_net = nn.Sequential(
+                # input is Z, going into a convolution
+                nn.ConvTranspose2d(in_channels=nz, out_channels=ngf * 4, kernel_size=4, stride=1, padding=0, bias=False),
+                nn.BatchNorm2d(ngf * 4),
+                nn.ReLU(True)
+                # state size. (ngf*4) x 4 x 4
+                )
 
         '''
         self.label_embedding = nn.Embedding(n_classes, n_classes)
@@ -104,21 +115,40 @@ class Generator(nn.Module):
             nn.Embedding(n_classes, n_classes),
             nn.Linear(n_classes, 4 * 4 * 4 * ngf)
         )
-
-        self.main = nn.Sequential(
-            # input is (ngf*8) x 4 x 4
-            nn.ConvTranspose2d(in_channels=ngf * 8, out_channels=ngf * 4, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(ngf * 4),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8
-            nn.ConvTranspose2d(in_channels=ngf * 4, out_channels=ngf * 2, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(ngf * 2),
-            nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d(in_channels=ngf * 2, out_channels=nc, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.Tanh()
-            # state size. (nc) x 32 x 32
-        )
+        
+        if VBN:
+            self.main = nn.Sequential(
+                # input is (ngf*8) x 4 x 4
+                nn.ConvTranspose2d(in_channels=ngf * 8, out_channels=ngf * 4, kernel_size=4, stride=2, padding=1, bias=False),
+                
+                VirtualBatchNorm(ngf * 4),
+                # nn.BatchNorm2d(ngf * 4),
+                nn.ReLU(True),
+                # state size. (ngf*4) x 8 x 8
+                nn.ConvTranspose2d(in_channels=ngf * 4, out_channels=ngf * 2, kernel_size=4, stride=2, padding=1, bias=False),
+                VirtualBatchNorm(ngf * 2),
+                # nn.BatchNorm2d(ngf * 2),
+                nn.ReLU(True),
+                # state size. (ngf*2) x 16 x 16
+                nn.ConvTranspose2d(in_channels=ngf * 2, out_channels=nc, kernel_size=4, stride=2, padding=1, bias=False),
+                nn.Tanh()
+                # state size. (nc) x 32 x 32
+            )
+        else:
+            self.main = nn.Sequential(
+                # input is (ngf*8) x 4 x 4
+                nn.ConvTranspose2d(in_channels=ngf * 8, out_channels=ngf * 4, kernel_size=4, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(ngf * 4),
+                nn.ReLU(True),
+                # state size. (ngf*4) x 8 x 8
+                nn.ConvTranspose2d(in_channels=ngf * 4, out_channels=ngf * 2, kernel_size=4, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(ngf * 2),
+                nn.ReLU(True),
+                # state size. (ngf*2) x 16 x 16
+                nn.ConvTranspose2d(in_channels=ngf * 2, out_channels=nc, kernel_size=4, stride=2, padding=1, bias=False),
+                nn.Tanh()
+                # state size. (nc) x 32 x 32
+            )
 
     def forward(self, input):
         noise, label = input
@@ -129,16 +159,20 @@ class Generator(nn.Module):
 
 
 def weights_init(m):
+    return
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
+    elif classname.find('VirtualBatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
 
 
 class CGAN(nn.Module):
-    def __init__(self, ngpu, device, n_classes=10, embedding_dim=10, lr=0.0002, nc=1, ndf=64, nz=100, ngf=64, beta1=0.5, real_label=1.0):
+    def __init__(self, ngpu, device, n_classes=10, embedding_dim=10, lr=0.0002, nc=1, ndf=64, nz=100, ngf=64, beta1=0.5, real_label=1.0, VBN=False):
         super(CGAN, self).__init__()
         self.ngpu = ngpu
         self.device = device
@@ -152,7 +186,7 @@ class CGAN(nn.Module):
         self.ngf = ngf
 
         # Create the generator
-        self.netG = Generator(ngpu, n_classes, nz, ngf, nc).to(device)
+        self.netG = Generator(ngpu, n_classes, nz, ngf, nc, VBN).to(device)
 
         # Handle multi-gpu if desired
         if (device.type == 'cuda') and (ngpu > 1):
@@ -288,8 +322,8 @@ class CGAN(nn.Module):
             fakes = self.netG((noises, labels)).detach().cpu()
         
         data = {
-            'images': fakes,
-            'labels': labels
+            'images': fakes.detach().cpu(),
+            'labels': labels.detach().cpu()
         }
 
         fake_dataset = FakeDataset(data)
@@ -301,18 +335,19 @@ class CGAN(nn.Module):
  
 class FakeDataset(Dataset):
     def __init__(self, data, transform=None):
-         self.transform = transform
-         self.data = data
+        super(FakeDataset, self).__init__()
+        self.transform = transform
+        self.data = data
     
     def __len__(self):
-        return len(self.data)
+        return len(self.data['images'])
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        image = self.data['images'][idx]
-        label = self.data['labels'][idx]
+        image = self.data['images'][idx].numpy()
+        label = self.data['labels'][idx].numpy()
         sample = (image, label)
 
         return sample

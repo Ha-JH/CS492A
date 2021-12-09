@@ -13,7 +13,7 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 class Classifier(nn.Module):
-    def __init__(self, device, batch_size=128, lr=0.001):
+    def __init__(self, device, train_size=60000-5000, batch_size=128, lr=0.001):
         super(Classifier, self).__init__()
         self.device = device
         self.net = LeNet().to(device)
@@ -31,10 +31,10 @@ class Classifier(nn.Module):
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,)),
         ])
+        ####### train size modify here
         dataset_full = datasets.MNIST('./mnist_data', train=True, download=True,
                         transform=transform)
-        valid_size = 5000
-        train_size = len(dataset_full) - 5000
+        valid_size = len(dataset_full) - train_size
         self.dataset_train, self.dataset_valid = torch.utils.data.random_split(dataset_full, [train_size, valid_size])
 
         self.dataset_test = datasets.MNIST('./mnist_data', train=False,
@@ -86,15 +86,18 @@ class Classifier(nn.Module):
         )
         print("Model saved")
 
+    # adversarial train
     def adv_train(self, fake_dataloader, num_epochs=30, model_path="./models/", filename="lenet.pt"):
 
         for e in range(num_epochs):
             self.net.train()
             loss_list, batch_list = [], []
-            for i, (images, labels) in enumerate(self.train_loader):
+            for (i, (images, labels)), (i, (fake_images, fake_labels)) in zip(enumerate(self.train_loader), enumerate(fake_dataloader)):
                 self.optimizer.zero_grad()
                 images = images.cuda() #####
                 labels = labels.cuda() #####
+                fake_images = fake_images.cuda() #####
+                fake_labels = fake_labels.cuda() #####
                 output = self.net(images)
                 loss = self.criterion(output, labels)
 
@@ -106,8 +109,6 @@ class Classifier(nn.Module):
 
                 loss.backward()
                 self.optimizer.step()
-
-                fake_images, fake_labels = fake_dataloader[i]
 
                 self.optimizer.zero_grad()
                 output = self.net(fake_images)
