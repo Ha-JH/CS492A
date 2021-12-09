@@ -9,6 +9,7 @@ import torch.backends.cudnn as cudnn
 import torch.optim as optim
 from torch.autograd import Variable, backward
 import torch.utils.data
+from torch.utils.data import Dataset
 import torchvision.datasets as dset
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
@@ -280,26 +281,25 @@ class CGAN(nn.Module):
         return img_list
     
     def create_dataloader(self, num_samples=1000, batch_size=128):
-        labels = torch.arange(64, device=self.device)
+        labels = torch.arange(num_samples, device=self.device)
         labels = torch.remainder(labels, self.n_classes)
         noises = torch.randn(num_samples, self.nz, 1, 1, device=self.device)
         with torch.no_grad():
-                fakes = self.netG(noises, labels).detach().cpu()
-                images = vutils.make_grid(fakes, padding=2, normalize=True)
+            fakes = self.netG((noises, labels)).detach().cpu()
         
         data = {
-            'images': images,
+            'images': fakes,
             'labels': labels
         }
 
-        dataset = FakeDataset(data)
+        fake_dataset = FakeDataset(data)
 
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
+        fake_dataloader = torch.utils.data.DataLoader(fake_dataset, batch_size=batch_size,
                         shuffle=True, num_workers=0)
 
-        return dataset, dataloader
+        return fake_dataset, fake_dataloader
  
-class FakeDataset(dset):
+class FakeDataset(Dataset):
     def __init__(self, data, transform=None):
          self.transform = transform
          self.data = data
@@ -313,8 +313,7 @@ class FakeDataset(dset):
 
         image = self.data['images'][idx]
         label = self.data['labels'][idx]
-        sample = {'image':image,'label':label}
+        sample = (image, label)
 
         return sample
-
     
